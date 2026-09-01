@@ -50,7 +50,8 @@
   <header>
     <h1>📡 爆款雷达</h1>
     <span class="date" id="date"></span>
-    <a class="back" href="/web/">← 返回首页</a>
+    <a class="back" href="/web/" id="backLink">← 返回首页</a>
+    <script>if (window.self !== window.top) document.currentScript.previousElementSibling.style.display = 'none';</script>
   </header>
   <div class="subtitle">各平台按主指标（赞/播放）硬排序 · 每天 08:00 自动扫描 · 看到能做的就收藏，进开工清单</div>
   <div class="tabs" id="tabs"></div>
