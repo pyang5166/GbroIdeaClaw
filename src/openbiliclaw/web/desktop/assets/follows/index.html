@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>📋 我的关注</title>
+<style>
+  /* 狗哥自定义页面（非上游文件）：盯单聚合——雷达话题 / X 博主 / 小红书博主 / 源预算 */
+  :root { --bg:#f6f3ea; --card:#fff; --ink:#2b2a26; --sub:#8a867c; --accent:#c96f4a; --line:#e7e2d5; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.5 -apple-system,"PingFang SC","Hiragino Sans GB",sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; padding:28px 20px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .subtitle { color:var(--sub); font-size:13px; margin-bottom:20px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:16px 18px; margin-bottom:14px; }
+  h2 { font-size:16px; margin:0 0 4px; }
+  .hint { color:var(--sub); font-size:12.5px; margin:0 0 12px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; background:#ece7da;
+    border-radius:99px; padding:5px 12px; font-size:13.5px; }
+  .chip .del { cursor:pointer; color:#a39d8f; font-weight:700; border:none; background:none;
+    font-size:14px; padding:0 2px; }
+  .chip .del:hover { color:var(--accent); }
+  .addrow { display:flex; gap:8px; margin-top:12px; }
+  .addrow input { flex:1; max-width:320px; border:1.5px solid var(--line); border-radius:10px;
+    padding:7px 12px; font-size:14px; background:#fbfaf6; }
+  .addrow button { border:none; background:var(--ink); color:#fff; border-radius:10px;
+    padding:7px 16px; cursor:pointer; font-size:13.5px; }
+  .addrow button:hover { background:var(--accent); }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--sub); font-weight:500; font-size:12.5px; }
+  .on { color:#2e7d32; font-weight:600; }
+  .off { color:#b0aa9c; }
+  .msg { font-size:12.5px; color:var(--accent); margin-left:8px; }
+  .empty { color:var(--sub); font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📋 我的关注</h1>
+  <div class="subtitle">盯单总览：改完即刻生效（话题次日雷达生效；博主下轮发现生效）</div>
+
+  <section>
+    <h2>🎯 雷达话题（盯赛道）</h2>
+    <p class="hint">每日爆款雷达按这些话题扫全平台，真源 topics.txt，此处增删即写回</p>
+    <div class="chips" id="topicChips"></div>
+    <div class="addrow">
+      <input id="topicInput" placeholder="新话题，如：AI生图工作流">
+      <button id="topicAdd">添加</button><span class="msg" id="topicMsg"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>👤 X 博主（盯人 · 盯上游）</h2>
+    <p class="hint">已订阅账号的新帖会进入首页流（经画像筛选），每日预算见下方源总览</p>
+    <div class="chips" id="xChips"></div>
+    <div class="addrow">
+      <input id="xInput" placeholder="X handle，如 karpathy（不带@）">
+      <button id="xAdd">添加</button><span class="msg" id="xMsg"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>📕 小红书博主（盯人）</h2>
+    <p class="hint">加博主主页 ID（主页链接 /user/profile/ 后面那串）</p>
+    <div class="chips" id="xhsChips"></div>
+    <div class="addrow">
+      <input id="xhsInput" placeholder="小红书用户 ID">
+      <button id="xhsAdd">添加</button><span class="msg" id="xhsMsg"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>📊 内容源与预算（盯我 · 全平台）</h2>
+    <p class="hint">只读总览；调整请去「设置」页对应源区块</p>
+    <table id="srcTable"><thead><tr><th>源</th><th>状态</th><th>每日预算</th><th>池子配比</th></tr></thead><tbody></tbody></table>
+  </section>
+</div>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+
+  function chip(label, onDel) {
+    const c = document.createElement('span'); c.className = 'chip';
+    const t = document.createElement('span'); t.textContent = label; c.appendChild(t);
+    const d = document.createElement('button'); d.className = 'del'; d.textContent = '×';
+    d.title = '删除'; d.onclick = onDel; c.appendChild(d);
+    return c;
+  }
+  function flash(id, text) { $(id).textContent = text; setTimeout(() => { $(id).textContent = ''; }, 2000); }
+
+  // ── 雷达话题 ──
+  let topics = [];
+  async function loadTopics() {
+    try {
+      const d = await (await fetch('/api/custom/radar-topics')).json();
+      topics = d.topics || [];
+    } catch (e) { $('topicChips').innerHTML = '<span class="empty">读取失败（后端需含自定义路由并已重启）</span>'; return; }
+    renderTopics();
+  }
+  function renderTopics() {
+    const box = $('topicChips'); box.innerHTML = '';
+    if (!topics.length) box.innerHTML = '<span class="empty">暂无话题</span>';
+    topics.forEach((t, i) => box.appendChild(chip(t, async () => {
+      if (!confirm('删除话题「' + t + '」？')) return;
+      topics.splice(i, 1); await saveTopics();
+    })));
+  }
+  async function saveTopics() {
+    const res = await fetch('/api/custom/radar-topics', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topics })
+    });
+    if (res.ok) { const d = await res.json(); topics = d.topics; renderTopics(); flash('topicMsg', '✓ 已保存'); }
+    else flash('topicMsg', '保存失败');
+  }
+  $('topicAdd').onclick = async () => {
+    const v = $('topicInput').value.trim();
+    if (!v) return;
+    topics.push(v); $('topicInput').value = ''; await saveTopics();
+  };
+
+  // ── 通用博主列表（X / 小红书共用一套逻辑）──
+  function creatorSection(api, chipsId, inputId, addId, msgId, labelOf) {
+    async function load() {
+      let items = [];
+      try { items = (await (await fetch(api)).json()).items || []; }
+      catch (e) { $(chipsId).innerHTML = '<span class="empty">读取失败</span>'; return; }
+      const box = $(chipsId); box.innerHTML = '';
+      if (!items.length) box.innerHTML = '<span class="empty">暂无订阅</span>';
+      items.forEach(it => {
+        const label = labelOf(it);
+        box.appendChild(chip(label, async () => {
+          if (!confirm('取消订阅「' + label + '」？')) return;
+          await fetch(api + '/' + it.id, { method: 'DELETE' });
+          load();
+        }));
+      });
+    }
+    $(addId).onclick = async () => {
+      const v = $(inputId).value.trim().replace(/^@/, '');
+      if (!v) return;
+      const body = api.includes('/x/')
+        ? { handle: v }
+        : { creator_id: v, creator_url: 'https://www.xiaohongshu.com/user/profile/' + v };
+      const res = await fetch(api, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) { $(inputId).value = ''; flash(msgId, '✓ 已订阅'); load(); }
+      else flash(msgId, '失败：' + res.status);
+    };
+    load();
+  }
+  creatorSection('/api/sources/x/creators', 'xChips', 'xInput', 'xAdd', 'xMsg',
+    it => '@' + (it.handle || it.screen_name || it.id));
+  creatorSection('/api/sources/xhs/creators', 'xhsChips', 'xhsInput', 'xhsAdd', 'xhsMsg',
+    it => it.nickname || it.user_id || it.id);
+
+  // ── 源预算总览 ──
+  (async function () {
+    let cfg;
+    try { cfg = await (await fetch('/api/config')).json(); } catch (e) { return; }
+    const names = { bilibili: 'B站', xiaohongshu: '小红书', douyin: '抖音', youtube: 'YouTube',
+      twitter: 'X', zhihu: '知乎', reddit: 'Reddit', bangumi: 'Bangumi', linuxdo: 'Linux.do',
+      v2ex: 'V2EX', weibo: '微博' };
+    const shares = (cfg.scheduler || {}).pool_source_shares || {};
+    const tbody = document.querySelector('#srcTable tbody');
+    Object.keys(names).forEach(key => {
+      const s = (cfg.sources || {})[key];
+      if (!s) return;
+      const budgets = Object.keys(s).filter(k => k.startsWith('daily_') && s[k])
+        .map(k => k.replace('daily_', '').replace('_budget', '') + ' ' + s[k]).join(' · ') || '—';
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + names[key] + '</td>' +
+        '<td class="' + (s.enabled ? 'on' : 'off') + '">' + (s.enabled ? '启用' : '关闭') + '</td>' +
+        '<td>' + budgets + '</td><td>' + (shares[key] ?? '—') + '</td>';
+      tbody.appendChild(tr);
+    });
+  })();
+
+  loadTopics();
+})();
+</script>
+</body>
+</html>

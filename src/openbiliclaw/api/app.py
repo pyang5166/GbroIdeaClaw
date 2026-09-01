@@ -20091,4 +20091,9 @@ def create_app(
     if _setup_dir.is_dir():
         app.mount("/setup", _StaticFiles(directory=_setup_dir, html=True), name="setup-wizard")
 
+    # 狗哥自定义路由（「我的关注」页），实现在 custom_routes.py，只挂这一行
+    from openbiliclaw.api import custom_routes as _custom_routes
+
+    _custom_routes.register(app)
+
     return app

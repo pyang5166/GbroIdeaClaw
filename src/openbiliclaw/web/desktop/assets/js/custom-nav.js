@@ -6,6 +6,8 @@
 
   var MAIN_PAGE_IDS = ['homePage', 'contentLibraryPage', 'profilePage', 'chatPage', 'settingsPage'];
   var BRANCHES = [
+    // placement:'afterProfile' 的按钮插在原生「我的画像」后面，其余进底部「灵感入口」分组
+    { emoji: '📋', label: '我的关注', id: 'followsPage', src: '/web/assets/follows/', placement: 'afterProfile' },
     { emoji: '📡', label: '爆款雷达', id: 'radarPage', src: '/web/assets/radar/' },
     { emoji: '🔭', label: 'AI热点', id: 'aihotPage', src: '/web/assets/aihot/' },
     { emoji: '🛠', label: 'Builders 日报', id: 'buildersPage', src: '/web/assets/builders/latest.html' }
@@ -79,9 +81,17 @@
     var label = document.createElement('div');
     label.textContent = '灵感入口';
     label.style.cssText = 'font-size:11px;color:#9a9588;padding:0 16px 4px;letter-spacing:1px;';
+    var profileBtn = document.getElementById('profileBtn');
+    BRANCHES.forEach(function (b) {
+      if (b.placement === 'afterProfile' && profileBtn && profileBtn.parentElement === nav) {
+        nav.insertBefore(makeBtn(b.emoji, b.label, function () { showBranch(b); }), profileBtn.nextSibling);
+      }
+    });
+
     nav.appendChild(divider);
     nav.appendChild(label);
     BRANCHES.forEach(function (b) {
+      if (b.placement === 'afterProfile') return;
       nav.appendChild(makeBtn(b.emoji, b.label, function () { showBranch(b); }));
     });
 
