@@ -879,7 +879,7 @@
     }
     const SIDE_DRAWER_OPEN_KEY = "openbiliclaw.sideDrawerOpen";
     const DELIGHT_QUEUE_LIMIT_KEY = "openbiliclaw.webui.delightQueueLimit";
-    const STAR_REPO_URL = "https://github.com/whiteguo233/OpenBiliClaw";
+    const STAR_REPO_URL = "https://github.com/pyang5166/GbroIdeaClaw";
     const STAR_COUNT_CACHE_KEY = "openbiliclaw.webui.starCount";
     const STAR_COUNT_TTL_MS = 12 * 60 * 60 * 1000;
     // 加载更多一次向后端请求的条数（后端 append 端点固定 limit=10）；
