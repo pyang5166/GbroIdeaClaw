@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🔭 AI热点</title>
+<style>
+  /* 狗哥自定义页面（非上游文件）：AIHOT 公开 API 直连（CORS 开放），实时热点+日报 */
+  :root {
+    --bg: #f6f3ea; --card: #ffffff; --ink: #2b2a26; --sub: #8a867c;
+    --accent: #c96f4a; --line: #e7e2d5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, "PingFang SC", "Hiragino Sans GB", sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  h1 { font-size: 22px; margin: 0; }
+  .date { color: var(--sub); font-size: 13px; }
+  .src-link { margin-left: auto; color: var(--accent); text-decoration: none; font-size: 13px; }
+  .subtitle { color: var(--sub); font-size: 13px; margin-bottom: 18px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab { padding: 6px 16px; border-radius: 99px; background: #ece7da; cursor: pointer;
+    font-size: 14px; color: #6b675c; border: none; }
+  .tab.active { background: var(--ink); color: #fff; font-weight: 600; }
+  .card { display: flex; gap: 14px; align-items: flex-start; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+  .rank { font-size: 18px; font-weight: 700; color: var(--sub); min-width: 28px; text-align: center; }
+  .rank.top { color: var(--accent); }
+  .main { flex: 1; min-width: 0; }
+  .title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .title a { color: inherit; text-decoration: none; }
+  .title a:hover { color: var(--accent); }
+  .summary { color: #5d5950; font-size: 13px; margin-bottom: 5px; }
+  .meta { display: flex; gap: 12px; flex-wrap: wrap; color: var(--sub); font-size: 12px; }
+  .signal { color: var(--accent); font-weight: 600; }
+  .meta a { color: var(--sub); }
+  .fav { border: 1.5px solid var(--line); background: transparent; border-radius: 10px;
+    padding: 7px 14px; cursor: pointer; font-size: 13px; color: var(--sub);
+    white-space: nowrap; transition: all .15s; }
+  .fav:hover { border-color: var(--accent); color: var(--accent); }
+  .fav.saved { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sec-title { font-size: 13px; color: var(--sub); margin: 18px 4px 8px; letter-spacing: 1px; }
+  .empty { text-align: center; color: var(--sub); padding: 60px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🔭 AI热点</h1>
+    <span class="date" id="date"></span>
+    <a class="src-link" href="https://aihot.virxact.com/" target="_blank" rel="noopener">数据源 AIHOT ↗</a>
+  </header>
+  <div class="subtitle">实时直连 AIHOT 公开 API · 多源信号聚合 · 看到能做的就收藏，进开工清单</div>
+  <div class="tabs">
+    <button class="tab active" id="tabHot">🔥 热点话题</button>
+    <button class="tab" id="tabDaily">📰 今日日报</button>
+  </div>
+  <div id="list"><div class="empty">加载中…</div></div>
+</div>
+<script>
+(async function () {
+  'use strict';
+  const API = 'https://aihot.virxact.com/api/v1';
+  const listEl = document.getElementById('list');
+  const tabHot = document.getElementById('tabHot');
+  const tabDaily = document.getElementById('tabDaily');
+
+  const savedMap = new Map();
+  try {
+    const fav = await (await fetch('/api/saved/favorite')).json();
+    (fav.items || []).forEach(it => { if (it.content_url) savedMap.set(it.content_url, it.item_key); });
+  } catch (e) { /* 收藏状态拿不到不影响浏览 */ }
+
+  function idFrom(links) {
+    const u = (links && (links.aihot || links.original)) || '';
+    const seg = u.split('/').filter(Boolean).pop() || '';
+    const clean = seg.replace(/[^\w-]/g, '');
+    if (clean) return clean;
+    let h = 0;
+    for (let i = 0; i < u.length; i++) h = (h * 31 + u.charCodeAt(i)) >>> 0;
+    return 'aihot' + h.toString(36);
+  }
+
+  function favBtn(item) {
+    const url = (item.links && (item.links.original || item.links.aihot)) || '';
+    const btn = document.createElement('button');
+    btn.className = 'fav';
+    if (savedMap.has(url)) { btn.classList.add('saved'); btn.textContent = '★ 已收藏'; }
+    else btn.textContent = '☆ 收藏';
+    btn.onclick = async () => {
+      try {
+        if (btn.classList.contains('saved')) {
+          const res = await fetch('/api/saved/favorite/remove', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_key: savedMap.get(url) || ('aihot:' + idFrom(item.links)) })
+          });
+          if (!res.ok) throw new Error(res.status);
+          savedMap.delete(url);
+          btn.classList.remove('saved'); btn.textContent = '☆ 收藏';
+        } else {
+          const res = await fetch('/api/saved/favorite', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source_platform: 'aihot', content_id: idFrom(item.links), content_url: url,
+              content_type: 'article', title: item.title || '',
+              author_name: (item.source && item.source.name) || 'AIHOT',
+              cover_url: '', note: 'AI热点 ' + new Date().toISOString().slice(0, 10)
+            })
+          });
+          if (!res.ok) throw new Error(res.status);
+          const out = await res.json();
+          savedMap.set(url, out.item_key);
+          btn.classList.add('saved'); btn.textContent = '★ 已收藏';
+        }
+      } catch (e) {
+        btn.textContent = '⚠ 失败,重试';
+        setTimeout(() => {
+          btn.textContent = btn.classList.contains('saved') ? '★ 已收藏' : '☆ 收藏';
+        }, 1500);
+      }
+    };
+    return btn;
+  }
+
+  function card(item, rankNo) {
+    const c = document.createElement('div'); c.className = 'card';
+    if (rankNo) {
+      const r = document.createElement('div');
+      r.className = 'rank' + (rankNo <= 3 ? ' top' : ''); r.textContent = rankNo;
+      c.appendChild(r);
+    }
+    const main = document.createElement('div'); main.className = 'main';
+    const t = document.createElement('div'); t.className = 'title';
+    const a = document.createElement('a');
+    a.href = (item.links && (item.links.original || item.links.aihot)) || '#';
+    a.target = '_blank'; a.rel = 'noopener'; a.textContent = item.title || '';
+    t.appendChild(a); main.appendChild(t);
+    if (item.summary) {
+      const s = document.createElement('div'); s.className = 'summary';
+      s.textContent = item.summary; main.appendChild(s);
+    }
+    const meta = document.createElement('div'); meta.className = 'meta';
+    if (item.sourceCount) {
+      const sig = document.createElement('span'); sig.className = 'signal';
+      sig.textContent = item.sourceCount + ' 源 · ' + (item.signalCount || 0) + ' 信号';
+      meta.appendChild(sig);
+    }
+    const srcName = document.createElement('span');
+    srcName.textContent = (item.source && item.source.name) || (item.sourceNames || []).slice(0, 2).join(' / ');
+    meta.appendChild(srcName);
+    if (item.links && item.links.aihot) {
+      const st = document.createElement('a');
+      st.href = item.links.aihot; st.target = '_blank'; st.rel = 'noopener';
+      st.textContent = '时间线 ↗'; meta.appendChild(st);
+    }
+    main.appendChild(meta);
+    c.appendChild(main);
+    c.appendChild(favBtn(item));
+    return c;
+  }
+
+  async function showHot() {
+    tabHot.classList.add('active'); tabDaily.classList.remove('active');
+    listEl.innerHTML = '<div class="empty">加载中…</div>';
+    try {
+      const d = await (await fetch(API + '/hot-topics')).json();
+      const items = Array.isArray(d) ? d : (d.items || d.topics || d.data || []);
+      listEl.innerHTML = '';
+      if (!items.length) { listEl.innerHTML = '<div class="empty">暂无热点数据</div>'; return; }
+      items.forEach(it => listEl.appendChild(card(it, it.rank)));
+    } catch (e) {
+      listEl.innerHTML = '<div class="empty">AIHOT 接口暂时不可达，稍后再试</div>';
+    }
+  }
+
+  async function showDaily() {
+    tabDaily.classList.add('active'); tabHot.classList.remove('active');
+    listEl.innerHTML = '<div class="empty">加载中…</div>';
+    try {
+      const d = await (await fetch(API + '/dailies/latest')).json();
+      const report = d.report || d;
+      document.getElementById('date').textContent = report.date || '';
+      listEl.innerHTML = '';
+      let any = false;
+      (report.sections || []).forEach((sec, i) => {
+        if (!sec.items || !sec.items.length) return;
+        any = true;
+        if (sec.title) {
+          const st = document.createElement('div'); st.className = 'sec-title';
+          st.textContent = sec.title; listEl.appendChild(st);
+        }
+        sec.items.forEach(it => listEl.appendChild(card(it)));
+      });
+      if (!any) listEl.innerHTML = '<div class="empty">今日日报暂未生成</div>';
+    } catch (e) {
+      listEl.innerHTML = '<div class="empty">AIHOT 接口暂时不可达，稍后再试</div>';
+    }
+  }
+
+  tabHot.onclick = showHot;
+  tabDaily.onclick = showDaily;
+  showHot();
+})();
+</script>
+</body>
+</html>
