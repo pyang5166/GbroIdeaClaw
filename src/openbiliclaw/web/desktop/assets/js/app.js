@@ -910,12 +910,8 @@
     }
 
     function showStarCount(n) {
-      const el = $("#starCount");
-      const text = formatStarCount(n);
-      if (el && text) {
-        el.textContent = text;
-        el.hidden = false;
-      }
+      // GbroIdeaClaw：按钮指向个人仓库，不展示上游 star 数
+      void n;
     }
 
     async function loadStarCount() {
