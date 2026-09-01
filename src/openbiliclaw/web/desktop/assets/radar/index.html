@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>📡 爆款雷达</title>
+<style>
+  /* 狗哥自定义页面（非上游文件）：每日爆款榜单，数据 latest.json 由 gbro-viral-radar-daily.sh 日更 */
+  :root {
+    --bg: #f6f3ea; --card: #ffffff; --ink: #2b2a26; --sub: #8a867c;
+    --accent: #c96f4a; --gold: #b8860b; --line: #e7e2d5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, "PingFang SC", "Hiragino Sans GB", sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  h1 { font-size: 22px; margin: 0; }
+  .date { color: var(--sub); font-size: 13px; }
+  .back { margin-left: auto; color: var(--accent); text-decoration: none; font-size: 14px; }
+  .subtitle { color: var(--sub); font-size: 13px; margin-bottom: 18px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tab { padding: 6px 16px; border-radius: 99px; background: #ece7da; cursor: pointer;
+    font-size: 14px; color: #6b675c; border: none; }
+  .tab.active { background: var(--ink); color: #fff; font-weight: 600; }
+  .card { display: flex; gap: 14px; align-items: flex-start; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+  .rank { font-size: 18px; font-weight: 700; color: var(--sub); min-width: 28px; text-align: center; }
+  .rank.top { color: var(--accent); }
+  .main { flex: 1; min-width: 0; }
+  .title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .title a { color: inherit; text-decoration: none; }
+  .title a:hover { color: var(--accent); }
+  .meta { display: flex; gap: 12px; flex-wrap: wrap; color: var(--sub); font-size: 12.5px; }
+  .metric { color: var(--accent); font-weight: 700; }
+  .badge-dark-horse { background: #1e1c18; color: #ffd166; font-size: 11px;
+    padding: 2px 8px; border-radius: 99px; margin-left: 6px; }
+  .fav { border: 1.5px solid var(--line); background: transparent; border-radius: 10px;
+    padding: 7px 14px; cursor: pointer; font-size: 13px; color: var(--sub);
+    white-space: nowrap; transition: all .15s; }
+  .fav:hover { border-color: var(--accent); color: var(--accent); }
+  .fav.saved { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .obs { background: #efe9db; border-radius: 12px; padding: 12px 16px; margin-top: 18px;
+    font-size: 13.5px; color: #5d5950; }
+  .empty { text-align: center; color: var(--sub); padding: 60px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📡 爆款雷达</h1>
+    <span class="date" id="date"></span>
+    <a class="back" href="/web/">← 返回首页</a>
+  </header>
+  <div class="subtitle">各平台按主指标（赞/播放）硬排序 · 每天 08:00 自动扫描 · 看到能做的就收藏，进开工清单</div>
+  <div class="tabs" id="tabs"></div>
+  <div id="list"></div>
+</div>
+<script>
+(async function () {
+  'use strict';
+  const PLATFORM_KEY = { '小红书': 'xiaohongshu', 'YouTube': 'youtube', 'B站': 'bilibili', '抖音': 'douyin' };
+  const listEl = document.getElementById('list');
+  const tabsEl = document.getElementById('tabs');
+
+  let data;
+  try {
+    data = await (await fetch('latest.json?t=' + Date.now())).json();
+  } catch (e) {
+    listEl.innerHTML = '<div class="empty">今日雷达数据未生成（每天 08:00 自动扫描）</div>';
+    return;
+  }
+  document.getElementById('date').textContent = data.date || '';
+
+  // 已收藏映射 content_url → item_key（跨刷新保持状态，取消时要用 item_key）
+  const savedMap = new Map();
+  try {
+    const fav = await (await fetch('/api/saved/favorite')).json();
+    (fav.items || []).forEach(it => { if (it.content_url) savedMap.set(it.content_url, it.item_key); });
+  } catch (e) { /* 收藏状态拿不到不影响浏览 */ }
+
+  // content_id 只允许单段稳定 ID（后端校验不接受含 / : 的值）
+  function contentIdFrom(url) {
+    try {
+      const u = new URL(url);
+      const v = u.searchParams.get('v');
+      if (v) return v;
+      const seg = (u.pathname.split('/').filter(Boolean).pop() || '').replace(/[^\w-]/g, '');
+      if (seg) return seg;
+    } catch (e) { /* 非法 URL 走散列兜底 */ }
+    let h = 0;
+    for (let i = 0; i < url.length; i++) h = (h * 31 + url.charCodeAt(i)) >>> 0;
+    return 'radar' + h.toString(36);
+  }
+
+  const platforms = (data.platforms || []).filter(p => p.items && p.items.length);
+  if (!platforms.length) {
+    listEl.innerHTML = '<div class="empty">今日雷达数据未生成（每天 08:00 自动扫描）</div>';
+    return;
+  }
+
+  async function toggleFav(btn, p, it) {
+    const platform = PLATFORM_KEY[p.name] || p.name.toLowerCase();
+    try {
+      if (btn.classList.contains('saved')) {
+        const res = await fetch('/api/saved/favorite/remove', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_key: savedMap.get(it.url) || (platform + ':' + contentIdFrom(it.url)) })
+        });
+        if (!res.ok) throw new Error(res.status);
+        savedMap.delete(it.url);
+        btn.classList.remove('saved'); btn.textContent = '☆ 收藏';
+      } else {
+        const res = await fetch('/api/saved/favorite', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_platform: platform, content_id: contentIdFrom(it.url), content_url: it.url,
+            content_type: 'video', title: it.title || '', author_name: it.account || '',
+            cover_url: it.cover || '', note: '爆款雷达 ' + (data.date || '')
+          })
+        });
+        if (!res.ok) throw new Error(res.status);
+        const out = await res.json();
+        savedMap.set(it.url, out.item_key);
+        btn.classList.add('saved'); btn.textContent = '★ 已收藏';
+      }
+    } catch (e) {
+      btn.textContent = '⚠ 失败,重试';
+      setTimeout(() => {
+        btn.textContent = btn.classList.contains('saved') ? '★ 已收藏' : '☆ 收藏';
+      }, 1500);
+    }
+  }
+
+  function show(idx) {
+    [...tabsEl.children].forEach((t, i) => t.classList.toggle('active', i === idx));
+    listEl.innerHTML = '';
+    const p = platforms[idx];
+    p.items.forEach((it, i) => {
+      const card = document.createElement('div'); card.className = 'card';
+      const rank = document.createElement('div');
+      rank.className = 'rank' + (i < 3 ? ' top' : ''); rank.textContent = i + 1;
+      const main = document.createElement('div'); main.className = 'main';
+      const title = document.createElement('div'); title.className = 'title';
+      const a = document.createElement('a');
+      a.href = it.url || '#'; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = it.title || '';
+      title.appendChild(a);
+      if (it.dark_horse) {
+        const b = document.createElement('span');
+        b.className = 'badge-dark-horse'; b.textContent = '🐴 黑马';
+        title.appendChild(b);
+      }
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const frag = [];
+      if (it.metric) frag.push(['metric', it.metric]);
+      if (it.account) frag.push(['', it.account]);
+      if (it.duration && it.duration !== '—') frag.push(['', it.duration]);
+      if (it.date) frag.push(['', it.date]);
+      frag.forEach(([cls, txt]) => {
+        const s = document.createElement('span'); if (cls) s.className = cls;
+        s.textContent = txt; meta.appendChild(s);
+      });
+      main.appendChild(title); main.appendChild(meta);
+      const fav = document.createElement('button'); fav.className = 'fav';
+      if (savedMap.has(it.url)) { fav.classList.add('saved'); fav.textContent = '★ 已收藏'; }
+      else fav.textContent = '☆ 收藏';
+      fav.onclick = () => toggleFav(fav, p, it);
+      card.appendChild(rank); card.appendChild(main); card.appendChild(fav);
+      listEl.appendChild(card);
+    });
+    (data.observations || []).forEach(o => {
+      const d = document.createElement('div'); d.className = 'obs'; d.textContent = '💡 ' + o;
+      listEl.appendChild(d);
+    });
+  }
+
+  platforms.forEach((p, i) => {
+    const t = document.createElement('button'); t.className = 'tab'; t.textContent = p.name;
+    t.onclick = () => show(i);
+    tabsEl.appendChild(t);
+  });
+  show(0);
+})();
+</script>
+</body>
+</html>
