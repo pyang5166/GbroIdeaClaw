@@ -7,7 +7,8 @@
   var MAIN_PAGE_IDS = ['homePage', 'contentLibraryPage', 'profilePage', 'chatPage', 'settingsPage'];
   var BRANCHES = [
     { emoji: '📡', label: '爆款雷达', id: 'radarPage', src: '/web/assets/radar/' },
-    { emoji: '🔭', label: 'AI热点', id: 'aihotPage', src: '/web/assets/aihot/' }
+    { emoji: '🔭', label: 'AI热点', id: 'aihotPage', src: '/web/assets/aihot/' },
+    { emoji: '🛠', label: 'Builders 日报', id: 'buildersPage', src: '/web/assets/builders/latest.html' }
   ];
 
   function makeBtn(emoji, label, onClick) {
